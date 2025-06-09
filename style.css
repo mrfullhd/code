@@ -1,0 +1,71 @@
+ (cd "$(git rev-parse --show-toplevel)" && git apply --3way <<'EOF' 
+diff --git a//dev/null b/style.css
+index 0000000000000000000000000000000000000000..3e97f534b09bdace5574c5a9da46e79f1a3477ca 100644
+--- a//dev/null
++++ b/style.css
+@@ -0,0 +1,62 @@
++body {
++    font-family: sans-serif;
++    margin: 0;
++    padding: 0;
++    background-color: #f3f4f6;
++    color: #333;
++}
++
++header {
++    background-color: #4f46e5;
++    color: white;
++    padding: 1.5rem 1rem;
++    text-align: center;
++}
++
++nav {
++    margin-top: 1rem;
++}
++
++nav a {
++    margin: 0 0.5rem;
++    text-decoration: none;
++    color: #4f46e5;
++    font-weight: bold;
++}
++
++section {
++    padding: 2rem 1rem;
++    max-width: 800px;
++    margin: 0 auto;
++}
++
++.projects {
++    display: grid;
++    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
++    gap: 1rem;
++}
++
++.project {
++    background-color: white;
++    padding: 1rem;
++    border-radius: 0.25rem;
++    box-shadow: 0 0 5px rgba(0,0,0,0.1);
++}
++
++footer {
++    text-align: center;
++    background-color: #e5e7eb;
++    padding: 1rem;
++}
++
++body.dark-mode {
++    background-color: #1f2937;
++    color: #f9fafb;
++}
++header.dark-mode,
++footer.dark-mode {
++    background-color: #374151;
++}
++nav.dark-mode a {
++    color: #a78bfa;
++}
+ 
+EOF
+)
