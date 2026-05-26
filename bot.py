@@ -11,7 +11,7 @@ import aiohttp
 import requests
 
 # --- تنظیمات اولیه ---
-BOT_TOKEN = "651070801:WKnxIXJk4Q4frV0SQCqWRqSEPkKBsq2ChQM"
+BOT_TOKEN = "توکن_بات_خود_را_اینجا_وارد_کنید"
 CHANNEL_ID = "@ABSChanel"
 CHANNEL_LINK = "https://ble.ir/ABSChanel"
 MAX_SIZE_MB = 19
@@ -29,7 +29,6 @@ logger = logging.getLogger(__name__)
 user_downloads = {}
 user_active_tasks = {}
 pending_downloads = {}
-membership_cache = {}
 
 # =================== کلاس اصلی ربات ===================
 class DownloadBot:
@@ -96,60 +95,81 @@ class DownloadBot:
             payload['show_alert'] = True
         return await self.api_call('answerCallbackQuery', payload)
     
-    # ========== منوی اصلی ربات (فقط برای اعضا) ==========
-    def get_main_menu(self) -> Dict:
-        """منوی اصلی ربات - فقط برای کاربران عضو"""
+    # ========== دکمه‌های شیک و حرفه‌ای ==========
+    
+    def get_main_menu_keyboard(self) -> Dict:
+        """منوی اصلی با دکمه‌های زیبا"""
         return {
             'inline_keyboard': [
                 [
-                    {'text': '📥 ارسال لینک دانلود', 'callback_data': 'send_link'},
-                    {'text': '📊 آمار امروز', 'callback_data': 'stats'}
+                    {'text': '📊 آمار امروز', 'callback_data': 'stats'},
+                    {'text': '📖 راهنمای ربات', 'callback_data': 'help'}
                 ],
                 [
-                    {'text': '📖 راهنما', 'callback_data': 'help'},
-                    {'text': 'ℹ️ درباره ربات', 'callback_data': 'about'}
+                    {'text': '🔗 عضویت در کانال', 'url': CHANNEL_LINK},
+                    {'text': '✅ بررسی عضویت', 'callback_data': 'check_membership'}
+                ],
+                [
+                    {'text': '💾 حجم فایل‌ها', 'callback_data': 'size_info'},
+                    {'text': '⚡️ وضعیت ربات', 'callback_data': 'bot_status'}
                 ]
             ],
             'resize_keyboard': True
         }
     
-    def get_check_membership_button(self) -> Dict:
-        """دکمه بررسی عضویت (فقط برای کاربران غیرعضو)"""
-        return {
-            'inline_keyboard': [
-                [
-                    {'text': '✅ بررسی عضویت', 'callback_data': 'check_member'}
-                ],
-                [
-                    {'text': '🔗 عضویت در کانال', 'url': CHANNEL_LINK}
-                ]
-            ]
-        }
-    
     def get_confirm_keyboard(self, user_id: int) -> Dict:
-        """دکمه تأیید دانلود"""
+        """دکمه‌های تأیید دانلود با طراحی خاص"""
         return {
             'inline_keyboard': [
                 [
-                    {'text': '✅ بله، شروع دانلود', 'callback_data': f'confirm_{user_id}'},
-                    {'text': '❌ انصراف', 'callback_data': f'cancel_{user_id}'}
+                    {'text': '✅ بله، شروع دانلود ✅', 'callback_data': f'confirm_{user_id}'},
+                    {'text': '❌ انصراف ❌', 'callback_data': f'cancel_{user_id}'}
                 ]
             ]
         }
     
-    # ========== بررسی عضویت با کش ==========
-    async def check_membership(self, user_id: int) -> bool:
-        """بررسی عضویت کاربر در کانال (با کش 5 دقیقه)"""
-        global membership_cache
-        now = time.time()
-        
-        # چک کش
-        if user_id in membership_cache:
-            cached_time, is_member = membership_cache[user_id]
-            if now - cached_time < 300:  # 5 دقیقه
-                return is_member
-        
-        # بررسی واقعی
+    def get_cancel_keyboard(self, user_id: int) -> Dict:
+        """دکمه لغو دانلود"""
+        return {
+            'inline_keyboard': [
+                [
+                    {'text': '🛑 لغو دانلود 🛑', 'callback_data': f'cancel_download_{user_id}'}
+                ]
+            ]
+        }
+    
+    def get_back_keyboard(self) -> Dict:
+        """دکمه بازگشت"""
+        return {
+            'inline_keyboard': [
+                [
+                    {'text': '🔙 برگشت به منوی اصلی', 'callback_data': 'back_to_menu'}
+                ]
+            ]
+        }
+    
+    # ========== انیمیشن‌های زیبا ==========
+    
+    def get_download_animation(self, percent: int) -> str:
+        """انیمیشن دانلود"""
+        frames = [
+            "🎬 ⠹", "🎬 ⠸", "🎬 ⠼", "🎬 ⠶", "🎬 ⠧", "🎬 ⠇", "🎬 ⠏", "🎬 ⠋"
+        ]
+        frame = frames[percent % len(frames)]
+        bar_length = 20
+        filled = int(bar_length * percent / 100)
+        bar = "█" * filled + "░" * (bar_length - filled)
+        return f"{frame} `{bar}` {percent}%"
+    
+    def get_upload_animation(self, step: int) -> str:
+        """انیمیشن آپلود"""
+        frames = ["📤 ⠹", "📤 ⠸", "📤 ⠼", "📤 ⠶", "📤 ⠧", "📤 ⠇", "📤 ⠏", "📤 ⠋"]
+        return frames[step % len(frames)]
+    
+    # ========== بررسی عضویت ==========
+    
+    async def check_membership(self, user_id: int) -> Tuple[bool, str]:
+        """بررسی عضویت کاربر در کانال"""
         try:
             payload = {
                 'chat_id': CHANNEL_ID,
@@ -162,27 +182,19 @@ class DownloadBot:
                 result_data = result.get('result', {})
                 status = result_data.get('status')
                 
-                is_member = status in ['member', 'administrator', 'creator']
-                
-                # ذخیره در کش
-                membership_cache[user_id] = (now, is_member)
-                
-                return is_member
+                if status in ['member', 'administrator', 'creator']:
+                    return True, status
+                else:
+                    return False, status if status else "left"
             else:
-                return False
+                return False, result.get('description', 'Unknown error')
                 
         except Exception as e:
             logger.error(f"Membership check error: {e}")
-            return False
-    
-    # ========== حذف کش عضویت ==========
-    def clear_membership_cache(self, user_id: int):
-        """پاک کردن کش عضویت کاربر"""
-        global membership_cache
-        if user_id in membership_cache:
-            del membership_cache[user_id]
+            return False, str(e)
     
     # ========== توابع دانلود و آپلود ==========
+    
     async def upload_file_from_path(self, chat_id: int, filepath: Path) -> Dict:
         """آپلود فایل از مسیر موجود"""
         url = f"{self.base_url}/sendDocument"
@@ -287,18 +299,20 @@ class DownloadBot:
             return None, f"❌ خطا در دانلود: {str(e)}"
     
     async def process_download(self, chat_id: int, user_id: int, url: str, status_msg_id: int):
-        """پردازش دانلود و آپلود"""
+        """پردازش دانلود و آپلود با انیمیشن"""
         filepath = None
         
         try:
             async def update_progress(percent):
-                bar_length = 20
-                filled = int(bar_length * percent / 100)
-                bar = "█" * filled + "░" * (bar_length - filled)
+                animation = self.get_download_animation(percent)
+                keyboard = self.get_cancel_keyboard(user_id)
                 await self.edit_message(chat_id, status_msg_id, 
-                                      f"📥 **دانلود فایل...**\n\n`{bar}` {percent}%\n\n⏱ لطفاً صبر کنید...")
+                                      f"📥 **در حال دانلود...**\n\n{animation}\n\n⏱ لطفاً صبر کنید...",
+                                      keyboard, "Markdown")
             
-            await self.edit_message(chat_id, status_msg_id, "📥 **شروع دانلود...**\n\n⏱ در حال اتصال به سرور...")
+            await self.edit_message(chat_id, status_msg_id, 
+                                  "🎬 **آماده به دانلود...**\n\n⏳ در حال اتصال به سرور...")
+            
             filepath, error = await self.download_file(url, user_id, update_progress)
             
             if error:
@@ -307,7 +321,12 @@ class DownloadBot:
             
             file_size_mb = filepath.stat().st_size / (1024 * 1024)
             
-            await self.edit_message(chat_id, status_msg_id, f"📤 **در حال آپلود...**\n\n📁 حجم: {file_size_mb:.2f} مگابایت\n\n⏱ در حال ارسال فایل...")
+            # انیمیشن آپلود
+            for i in range(6):
+                anim = self.get_upload_animation(i)
+                await self.edit_message(chat_id, status_msg_id, 
+                                      f"{anim} **در حال آپلود...**\n\n📁 حجم: {file_size_mb:.2f} مگابایت\n\n⏱ در حال ارسال فایل...")
+                await asyncio.sleep(0.3)
             
             result = await self.upload_file_from_path(chat_id, filepath)
             
@@ -316,17 +335,22 @@ class DownloadBot:
                 remaining = DAILY_LIMIT - self.get_user_today_downloads(user_id)
                 
                 result_text = (
-                    f"✅ **فایل با موفقیت ارسال شد!**\n\n"
-                    f"📁 **نام:** `{filepath.name[:40]}`\n"
-                    f"💾 **حجم:** {file_size_mb:.2f} مگابایت\n"
-                    f"📊 **دانلود امروز:** {self.get_user_today_downloads(user_id)} از {DAILY_LIMIT}\n"
-                    f"⚡️ **باقی‌مانده:** {remaining}\n\n"
-                    f"🎯 **برای دانلود مجدد، لینک جدید بفرستید**"
+                    f"✅ **فایل با موفقیت ارسال شد!** ✅\n\n"
+                    f"┌───────────────────┐\n"
+                    f"│ 📁 نام: `{filepath.name[:40]}`\n"
+                    f"│ 💾 حجم: {file_size_mb:.2f} مگابایت\n"
+                    f"│ 📊 دانلود امروز: {self.get_user_today_downloads(user_id)}/{DAILY_LIMIT}\n"
+                    f"│ ⚡️ باقی‌مانده: {remaining}\n"
+                    f"└───────────────────┘\n\n"
+                    f"🎯 **برای دانلود مجدد، لینک جدید بفرستید**\n\n"
+                    f"👨‍💻 **ساخته شده توسط:** {CHANNEL_ID}"
                 )
-                await self.edit_message(chat_id, status_msg_id, result_text)
+                await self.edit_message(chat_id, status_msg_id, result_text, self.get_back_keyboard(), "Markdown")
             else:
                 error_msg = result.get('description', 'ناشناخته')
-                await self.edit_message(chat_id, status_msg_id, f"❌ **خطا در آپلود:** {error_msg}")
+                await self.edit_message(chat_id, status_msg_id, 
+                                      f"❌ **خطا در آپلود:** {error_msg}\n\n🔙 لطفاً دوباره تلاش کنید.",
+                                      self.get_back_keyboard())
                 
         except Exception as e:
             await self.edit_message(chat_id, status_msg_id, f"❌ **خطا:** {str(e)}")
@@ -386,73 +410,86 @@ class DownloadBot:
         if not message:
             return
         
-        chat_id = message.get('chat', {}).get('id')
-        from_user = message.get('from') or message.get('from_user', {})
-        user_id = from_user.get('id')
+        chat = message.get('chat', {})
+        chat_id = chat.get('id')
+        
+        from_user = message.get('from')
+        if not from_user:
+            from_user = message.get('from_user', {})
+        
+        user_id = from_user.get('id') if from_user else None
         
         if not chat_id or not user_id:
             return
         
         text = message.get('text', '').strip()
         
-        # ========== دستور /start ==========
+        # ========== دستور /start با طراحی زیبا ==========
         if text == "/start":
-            # بررسی عضویت
-            is_member = await self.check_membership(user_id)
+            is_member, status = await self.check_membership(user_id)
             
-            if is_member:
-                # اگر عضو هست، پیام خوش‌آمدگویی و منوی اصلی
-                await self.send_message(
-                    chat_id,
-                    f"🌹 **سلام! خوش آمدی** 🌹\n\n"
-                    f"✅ عضویت شما در کانال تایید شد.\n\n"
-                    f"📥 **برای دانلود کافیه لینک فایل رو برام بفرستی**\n\n"
-                    f"📊 محدودیت روزانه: {DAILY_LIMIT} فایل\n"
-                    f"📁 حداکثر حجم: {MAX_SIZE_MB} مگابایت\n\n"
-                    f"از منوی زیر استفاده کن:",
-                    self.get_main_menu()
-                )
-            else:
-                # اگر عضو نیست، پیام عضویت اجباری
-                await self.send_message(
-                    chat_id,
+            if not is_member:
+                welcome_text = (
                     f"🔒 **عضویت اجباری** 🔒\n\n"
-                    f"🚫 برای استفاده از ربات، ابتدا باید عضو کانال ما بشی!\n\n"
-                    f"📢 **کانال:** {CHANNEL_ID}\n"
+                    f"┌─────────────────────┐\n"
+                    f"│ 🚫 برای استفاده از   │\n"
+                    f"│    ربات ابتدا عضو   │\n"
+                    f"│    کانال شوید!      │\n"
+                    f"└─────────────────────┘\n\n"
+                    f"📢 **کانال ما:** {CHANNEL_ID}\n"
                     f"🔗 **لینک عضویت:** {CHANNEL_LINK}\n\n"
-                    f"✅ **بعد از عضویت، روی دکمه «بررسی عضویت» کلیک کن**",
-                    self.get_check_membership_button()
+                    f"✅ **بعد از عضویت، دوباره /start بزنید**\n\n"
+                    f"⭐️ **چرا عضو بشم؟**\n"
+                    f"• دسترسی به دانلودر حرفه‌ای\n"
+                    f"• اطلاع از آپدیت‌های جدید\n"
+                    f"• پشتیبانی ویژه\n\n"
+                    f"🎯 **منتظر شما هستیم!**"
                 )
+                await self.send_message(chat_id, welcome_text, self.get_main_menu_keyboard(), "Markdown")
+                return
+            
+            welcome_text = (
+                f"🌹 **سلام! خوش آمدی** 🌹\n\n"
+                f"┌─────────────────────┐\n"
+                f"│ ✅ عضویت شما تایید  │\n"
+                f"│    شد!              │\n"
+                f"└─────────────────────┘\n\n"
+                f"🎯 **چطوری دانلود کنم؟**\n"
+                f"• لینک مستقیم فایل رو برام بفرست\n"
+                f"• حجم و اطلاعات فایل رو بررسی می‌کنم\n"
+                f"• با تایید شما، دانلود شروع میشه\n\n"
+                f"📊 **محدودیت‌ها:**\n"
+                f"• حداکثر حجم: {MAX_SIZE_MB} مگابایت\n"
+                f"• دانلود روزانه: {DAILY_LIMIT} فایل\n"
+                f"• پشتیبانی از همه فرمت‌ها\n\n"
+                f"💡 **برای شروع، یه لینک بفرست...**\n\n"
+                f"👨‍💻 **ساخته شده توسط:** {CHANNEL_ID}"
+            )
+            await self.send_message(chat_id, welcome_text, self.get_main_menu_keyboard(), "Markdown")
             return
         
-        # ========== برای پیام‌های غیر از /start ==========
-        # بررسی عضویت
-        is_member = await self.check_membership(user_id)
+        # ========== بررسی عضویت برای سایر دستورات ==========
+        is_member, _ = await self.check_membership(user_id)
         
         if not is_member:
-            # اگر عضو نیست، پیام عضویت اجباری
-            await self.send_message(
-                chat_id,
-                f"🔒 **عضویت اجباری** 🔒\n\n"
-                f"🚫 شما عضو کانال ما نیستی!\n\n"
-                f"📢 **کانال:** {CHANNEL_ID}\n"
-                f"🔗 **لینک عضویت:** {CHANNEL_LINK}\n\n"
-                f"✅ بعد از عضویت، روی دکمه «بررسی عضویت» کلیک کن",
-                self.get_check_membership_button()
+            not_member_text = (
+                f"🚫 **شما عضو کانال ما نیستید!**\n\n"
+                f"📢 برای استفاده از ربات ابتدا عضو شوید:\n"
+                f"🔗 {CHANNEL_LINK}\n\n"
+                f"✅ بعد از عضویت، /start را بزنید."
             )
+            await self.send_message(chat_id, not_member_text, self.get_main_menu_keyboard(), "Markdown")
             return
         
-        # ========== اگر عضو هست، پردازش پیام ==========
-        
-        # بررسی لینک
+        # ========== پردازش لینک ==========
         if not (text.startswith('http://') or text.startswith('https://')):
             await self.send_message(
                 chat_id,
                 f"❌ **لینک نامعتبر!**\n\n"
                 f"لطفاً یک لینک معتبر ارسال کنید:\n"
                 f"`https://example.com/file.zip`\n\n"
-                f"📊 برای مشاهده آمار از منو استفاده کن.",
-                self.get_main_menu()
+                f"📊 برای مشاهده آمار از دکمه 📊 استفاده کنید.",
+                None, "Markdown"
             )
             return
         
@@ -463,8 +500,7 @@ class DownloadBot:
                 f"⛔️ **به محدودیت روزانه رسیدی!**\n\n"
                 f"📊 امروز {self.get_user_today_downloads(user_id)} فایل دانلود کرده‌ای.\n"
                 f"🔢 حداکثر مجاز: {DAILY_LIMIT} فایل در روز\n\n"
-                f"🕐 **فردا دوباره تلاش کن.**",
-                self.get_main_menu()
+                f"🕐 **فردا دوباره تلاش کن.**"
             )
             return
         
@@ -474,8 +510,7 @@ class DownloadBot:
                 chat_id,
                 f"⏳ **در حال دانلود فایل قبلی...**\n\n"
                 f"لطفاً صبر کنید تا دانلود فعلی تکمیل بشه.\n"
-                f"حداکثر زمان انتظار: ۱۰ دقیقه",
-                self.get_main_menu()
+                f"حداکثر زمان انتظار: ۱۰ دقیقه"
             )
             return
         
@@ -512,118 +547,133 @@ class DownloadBot:
         size_text = self.format_size(file_size)
         rules_text = (
             f"📋 **تأییدیه دانلود** 📋\n\n"
-            f"📁 **نام:** `{filename[:35]}`\n"
-            f"💾 **حجم:** {size_text}\n"
-            f"📊 **حد مجاز:** {MAX_SIZE_MB} مگابایت\n\n"
-            f"⚠️ **توجه:** مسئولیت استفاده از فایل با خودته!\n\n"
-            f"✅ آیا برای دانلود تأیید میکنی؟"
+            f"┌─────────────────────┐\n"
+            f"│ 📁 نام: `{filename[:35]}`\n"
+            f"│ 💾 حجم: {size_text}\n"
+            f"│ 📊 حد مجاز: {MAX_SIZE_MB} MB\n"
+            f"└─────────────────────┘\n\n"
+            f"⚠️ **قوانین استفاده:**\n"
+            f"• محتوای غیرقانونی ممنوع ❌\n"
+            f"• فایل‌های مخرب ممنوع ❌\n"
+            f"• کپی‌رایت بدون مجوز ممنوع ❌\n\n"
+            f"✅ با کلیک روی دکمه زیر، تأیید می‌کنید که:\n"
+            f"• محتوای فایل با قوانین مطابقت دارد\n"
+            f"• مسئولیت استفاده با خودتان است\n\n"
+            f"⚠️ **در صورت تخلف، دسترسی شما مسدود خواهد شد!**"
         )
         
         keyboard = self.get_confirm_keyboard(user_id)
-        await self.send_message(chat_id, rules_text, keyboard)
+        await self.send_message(chat_id, rules_text, keyboard, "Markdown")
     
     # ========== پردازش کلیک دکمه‌ها ==========
     
     async def process_callback(self, callback: Dict[str, Any]):
         message = callback.get('message', {})
         chat_id = message.get('chat', {}).get('id')
-        message_id = message.get('message_id')
         
-        from_user = callback.get('from') or callback.get('from_user', {})
-        user_id = from_user.get('id')
+        from_user = callback.get('from')
+        if not from_user:
+            from_user = callback.get('from_user', {})
         
+        user_id = from_user.get('id') if from_user else None
         data = callback.get('data', '')
         callback_id = callback.get('id', '')
+        message_id = message.get('message_id')
         
         if not chat_id or not user_id:
             return
         
         await self.answer_callback(callback_id)
         
-        # ========== دکمه بررسی عضویت ==========
-        if data == 'check_member':
-            # پاک کردن کش عضویت برای بررسی مجدد
-            self.clear_membership_cache(user_id)
-            
-            # بررسی مجدد عضویت
-            is_member = await self.check_membership(user_id)
-            
-            if is_member:
-                # حذف پیام عضویت اجباری
-                await self.delete_message(chat_id, message_id)
-                
-                # ارسال منوی اصلی
-                await self.send_message(
-                    chat_id,
-                    f"🌹 **عضویت شما تایید شد!** 🌹\n\n"
-                    f"✅ به ربات خوش آمدی.\n\n"
-                    f"📥 **برای دانلود کافیه لینک فایل رو برام بفرستی**\n\n"
-                    f"از منوی زیر استفاده کن:",
-                    self.get_main_menu()
-                )
-            else:
-                # هنوز عضو نشده
-                await self.answer_callback(callback_id, "❌ شما هنوز عضو کانال نشدید! لطفاً ابتدا عضو شوید.", True)
+        # بررسی عضویت
+        is_member, _ = await self.check_membership(user_id)
+        if not is_member and data not in ['check_membership']:
+            await self.edit_message(chat_id, message_id, 
+                                  "🚫 **شما عضو کانال نیستید!**\n\nلطفاً ابتدا عضو شوید و /start را بزنید.",
+                                  self.get_main_menu_keyboard())
             return
         
         # ========== منوی اصلی ==========
         
-        if data == 'send_link':
-            await self.send_message(
-                chat_id,
-                f"📥 **ارسال لینک دانلود**\n\n"
-                f"لطفاً لینک مستقیم فایل مورد نظرت رو برام بفرست.\n\n"
-                f"مثال: `https://example.com/file.zip`\n\n"
-                f"📊 محدودیت‌ها:\n"
-                f"• حداکثر حجم: {MAX_SIZE_MB} مگابایت\n"
-                f"• تعداد روزانه: {DAILY_LIMIT} فایل",
-                self.get_main_menu()
-            )
-            
-        elif data == 'stats':
+        if data == 'stats':
             used = self.get_user_today_downloads(user_id)
             remaining = DAILY_LIMIT - used
             has_active = self.has_active_task(user_id)
             
             stats_text = (
                 f"📊 **آمار امروز شما** 📊\n\n"
-                f"✅ دانلود شده: **{used}** فایل\n"
-                f"⏳ باقی مانده: **{remaining}** فایل\n"
-                f"🔢 سقف روزانه: **{DAILY_LIMIT}** فایل\n\n"
+                f"┌─────────────────────┐\n"
+                f"│ ✅ دانلود شده: {used}\n"
+                f"│ ⏳ باقی مانده: {remaining}\n"
+                f"│ 🔢 سقف روزانه: {DAILY_LIMIT}\n"
+                f"└─────────────────────┘\n\n"
                 f"{'⚡️ در حال دانلود...' if has_active else '✅ آماده برای دانلود'}\n\n"
-                f"📥 برای دانلود، لینک فایل رو بفرست!"
+                f"🎯 برای دانلود، لینک فایل رو بفرست!"
             )
-            await self.send_message(chat_id, stats_text, self.get_main_menu())
+            await self.send_message(chat_id, stats_text, self.get_back_keyboard(), "Markdown")
             
         elif data == 'help':
             help_text = (
                 f"📖 **راهنمای کاربری ربات** 📖\n\n"
-                f"**مراحل استفاده:**\n"
-                f"1️⃣ لینک مستقیم فایل رو برام بفرست\n"
-                f"2️⃣ ربات اطلاعات فایل رو بررسی میکنه\n"
-                f"3️⃣ با تایید تو، دانلود شروع میشه\n"
-                f"4️⃣ فایل دانلود و برات آپلود میشه\n\n"
-                f"**محدودیت‌ها:**\n"
+                f"┌─────────────────────────────────┐\n"
+                f"│ 1️⃣ لینک مستقیم فایل رو بفرست    │\n"
+                f"│ 2️⃣ ربات اطلاعات فایل رو میگیره │\n"
+                f"│ 3️⃣ قوانین رو تایید کن          │\n"
+                f"│ 4️⃣ دانلود خودکار شروع میشه     │\n"
+                f"│ 5️⃣ فایل برات آپلود میشه        │\n"
+                f"└─────────────────────────────────┘\n\n"
+                f"📊 **محدودیت‌ها:**\n"
                 f"• حداکثر حجم: {MAX_SIZE_MB} مگابایت\n"
                 f"• تعداد در روز: {DAILY_LIMIT} فایل\n"
                 f"• دانلود همزمان: فقط یک فایل\n\n"
-                f"**فرمت‌های پشتیبانی:**\n"
-                f"همه فرمت‌ها (ویدیو، صدا، عکس، PDF، ZIP و...)"
+                f"📁 **فرمت‌های پشتیبانی:**\n"
+                f"• ویدیو، صدا، عکس، PDF، ZIP و...\n\n"
+                f"🔗 **کانال ما:** {CHANNEL_ID}\n\n"
+                f"⭐️ **برای شروع، یه لینک بفرست!**"
             )
-            await self.send_message(chat_id, help_text, self.get_main_menu())
+            await self.send_message(chat_id, help_text, self.get_back_keyboard(), "Markdown")
             
-        elif data == 'about':
-            about_text = (
-                f"ℹ️ **درباره ربات** ℹ️\n\n"
-                f"🤖 **نام:** ربات دانلودر حرفه‌ای\n"
-                f"📡 **پلتفرم:** پیام‌رسان بله\n"
-                f"📁 **حداکثر حجم:** {MAX_SIZE_MB} مگابایت\n"
-                f"📊 **محدودیت روزانه:** {DAILY_LIMIT} فایل\n"
-                f"🔒 **عضویت اجباری:** {CHANNEL_ID}\n\n"
-                f"👨‍💻 **ساخته شده با:** Python + Love\n\n"
-                f"🎯 **هدف:** دانلود آسان و سریع فایل‌ها"
+        elif data == 'check_membership':
+            is_member, status = await self.check_membership(user_id)
+            if is_member:
+                text = f"✅ **وضعیت عضویت:**\n\nشما عضو {CHANNEL_ID} هستید!\nوضعیت: {status}\n\n🎯 می‌توانید از ربات استفاده کنید."
+            else:
+                text = f"❌ **وضعیت عضویت:**\n\nشما عضو {CHANNEL_ID} نیستید!\n\n🔗 لطفاً عضو شوید:\n{CHANNEL_LINK}\n\n✅ بعد از عضویت، /start را بزنید."
+            await self.send_message(chat_id, text, self.get_back_keyboard(), "Markdown")
+            
+        elif data == 'size_info':
+            size_text = (
+                f"💾 **اطلاعات حجم فایل‌ها** 💾\n\n"
+                f"┌─────────────────────┐\n"
+                f"│ 📁 حداکثر حجم:      │\n"
+                f"│    {MAX_SIZE_MB} مگابایت    │\n"
+                f"│ 📊 حجم‌های مجاز:    │\n"
+                f"│    • کمتر از 1MB    │\n"
+                f"│    • 1 تا 5MB       │\n"
+                f"│    • 5 تا {MAX_SIZE_MB}MB    │\n"
+                f"└─────────────────────┘\n\n"
+                f"⚠️ فایل‌های بزرگتر از {MAX_SIZE_MB}MB رد می‌شن!"
             )
-            await self.send_message(chat_id, about_text, self.get_main_menu())
+            await self.send_message(chat_id, size_text, self.get_back_keyboard(), "Markdown")
+            
+        elif data == 'bot_status':
+            status_text = (
+                f"⚡️ **وضعیت ربات** ⚡️\n\n"
+                f"┌─────────────────────┐\n"
+                f"│ ✅ وضعیت: فعال      │\n"
+                f"│ 📊 کاربران فعال: {len(user_downloads)}\n"
+                f"│ 📁 حداکثر حجم: {MAX_SIZE_MB}MB\n"
+                f"│ 🔢 محدودیت روزانه: {DAILY_LIMIT}\n"
+                f"│ 🔒 عضویت اجباری: فعال\n"
+                f"└─────────────────────┘\n\n"
+                f"🎯 ربات آماده提供服务 است!"
+            )
+            await self.send_message(chat_id, status_text, self.get_back_keyboard(), "Markdown")
+            
+        elif data == 'back_to_menu':
+            await self.edit_message(chat_id, message_id, 
+                                  "🔙 **بازگشت به منوی اصلی**\n\nاز دکمه‌های زیر استفاده کنید:",
+                                  self.get_main_menu_keyboard(), "Markdown")
         
         # ========== تأیید دانلود ==========
         elif data.startswith('confirm_'):
@@ -634,7 +684,8 @@ class DownloadBot:
             
             if user_id not in pending_downloads:
                 await self.edit_message(chat_id, message_id, 
-                                      "❌ **لینک منقضی شده!**\n\nلطفاً دوباره لینک رو ارسال کنید.")
+                                      "❌ **لینک منقضی شده!**\n\nلطفاً دوباره لینک رو ارسال کنید.",
+                                      self.get_back_keyboard())
                 return
             
             download_info = pending_downloads[user_id]
@@ -642,7 +693,7 @@ class DownloadBot:
             del pending_downloads[user_id]
             
             await self.edit_message(chat_id, message_id, 
-                                  "✅ **تأیید شد!**\n\n🎬 در حال آماده‌سازی برای دانلود...")
+                                  "✅ **تأیید شد!**\n\n🎬 در حال آماده‌سازی برای دانلود...\n⏱ لطفاً صبر کنید...")
             
             self.set_active_task(user_id)
             
@@ -661,28 +712,43 @@ class DownloadBot:
             if user_id in pending_downloads:
                 del pending_downloads[user_id]
             await self.edit_message(chat_id, message_id, 
-                                  "❌ **عملیات کنسل شد.**\n\n🎯 برای شروع دوباره، لینک جدید بفرست.")
+                                  "❌ **عملیات کنسل شد.**\n\n🎯 برای شروع دوباره، لینک جدید بفرست.",
+                                  self.get_back_keyboard())
+        
+        elif data.startswith('cancel_download_'):
+            cancel_user_id = int(data.split('_')[2])
+            if cancel_user_id != user_id:
+                await self.answer_callback(callback_id, "این دکمه مال شما نیست!", True)
+                return
+            
+            if self.has_active_task(user_id):
+                self.remove_active_task(user_id)
+                await self.edit_message(chat_id, message_id, 
+                                      "🛑 **دانلود لغو شد.**\n\n🎯 می‌تونی دوباره تلاش کنی.",
+                                      self.get_back_keyboard())
     
     # ========== حلقه اصلی ==========
     async def run(self):
         await self.init_session()
-        logger.info("🤖 ربات دانلودر شروع به کار کرد!")
+        logger.info("🤖 ربات حرفه‌ای دانلودر شروع به کار کرد!")
         
         print("=" * 70)
-        print("🚀 ربات دانلودر حرفه‌ای بله (نسخه ساده با عضویت اجباری)")
+        print("🎨 ربات دانلودر حرفه‌ای بله (نسخه ویژه با طراحی مدرن)")
         print("=" * 70)
         print(f"📁 پوشه دانلود: {self.download_dir.absolute()}")
         print(f"📊 محدودیت روزانه: {DAILY_LIMIT} فایل")
         print(f"📁 حداکثر حجم: {MAX_SIZE_MB} مگابایت")
-        print(f"🔒 کانال عضویت: {CHANNEL_ID}")
-        print(f"🎨 طراحی: ساده، سریع، کاربرپسند")
+        print(f"🔒 کانال: {CHANNEL_ID}")
+        print(f"🎨 طراحی: دکمه‌های شیک + انیمیشن + منوی حرفه‌ای")
         print("=" * 70)
         print("✅ ربات در حال اجراست...")
-        print("📌 ویژگی‌ها:")
-        print("   • عضویت اجباری ساده")
-        print("   • منوی اصلی برای اعضا")
-        print("   • بررسی خودکار عضویت")
-        print("   • حذف خودکار پیام عضویت بعد از تایید")
+        print("✨ امکانات ویژه:")
+        print("   • منوی اصلی با ۶ دکمه شیک")
+        print("   • انیمیشن‌های دانلود و آپلود")
+        print("   • نوار پیشرفت دانلود")
+        print("   • طراحی باکس‌های زیبا")
+        print("   • دکمه‌های بازگشت به منو")
+        print("⚡️ بدون قفل شدن - پاسخگو به همه")
         print("❌ Ctrl+C برای توقف")
         print("=" * 70)
         
