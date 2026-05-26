@@ -11,7 +11,7 @@ import aiohttp
 import requests
 
 # --- تنظیمات اولیه ---
-BOT_TOKEN = "توکن_بات_خود_را_اینجا_وارد_کنید"
+BOT_TOKEN = "651070801:WKnxIXJk4Q4frV0SQCqWRqSEPkKBsq2ChQM"
 CHANNEL_ID = "@ABSChanel"
 CHANNEL_LINK = "https://ble.ir/ABSChanel"
 MAX_SIZE_MB = 19
