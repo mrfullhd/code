@@ -7,7 +7,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # فایل ورودی و خروجی
-INPUT_FILE="proxy_socks_ip"
+INPUT_FILE="proxy_socks_ip.txt"
 WORKING_FILE="working_proxies.txt"
 FAILED_FILE="failed_proxies.txt"
 
