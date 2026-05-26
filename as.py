@@ -4,12 +4,14 @@ import sys
 import os
 import yt_dlp
 from typing import List, Tuple, Optional
+from datetime import datetime
 
 
 class ProxyTester:
-    def __init__(self, proxy_file: str = "proxy_socks_ip.txt", cookie_file: str = None):
+    def __init__(self, proxy_file: str = "working_proxies.txt", cookie_file: str = None, output_file: str = None):
         self.proxy_file = proxy_file
-        self.cookie_file = cookie_file  # مسیر فایل کوکی
+        self.cookie_file = cookie_file
+        self.output_file = output_file or f"valid_proxies_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
         self.proxies = []
         self.load_proxies()
         self.check_cookie_file()
@@ -21,6 +23,9 @@ class ProxyTester:
                 for line in f:
                     line = line.strip()
                     if line and ':' in line:
+                        # پرش از خطوط توضیحی
+                        if line.startswith('#') or line.startswith('//'):
+                            continue
                         # تبدیل IP:PORT به فرمت socks5://IP:PORT
                         if not line.startswith('socks5://'):
                             self.proxies.append(f"socks5://{line}")
@@ -29,6 +34,7 @@ class ProxyTester:
             print(f"✅ Loaded {len(self.proxies)} proxies from {self.proxy_file}")
         except FileNotFoundError:
             print(f"❌ Proxy file {self.proxy_file} not found!")
+            print(f"💡 Please create {self.proxy_file} with proxies (one per line, format: IP:PORT)")
             sys.exit(1)
     
     def check_cookie_file(self):
@@ -103,7 +109,6 @@ class ProxyTester:
             elif "private" in error_msg:
                 return False, "❌ Video is private"
             else:
-                # خلاصه خطا
                 short_err = error_msg[:80].replace('\n', ' ')
                 return False, f"❌ Error: {short_err}"
                 
@@ -117,8 +122,9 @@ class ProxyTester:
         working_proxies = []
         failed_proxies = []
         
-        print(f"\n🚀 Testing {len(proxies_to_test)} proxies with cookie file...")
+        print(f"\n🚀 Testing {len(proxies_to_test)} proxies from {self.proxy_file}...")
         print(f"📁 Cookie file: {self.cookie_file if self.cookie_file else 'Not found!'}")
+        print(f"💾 Output file: {self.output_file}")
         print("-" * 70)
         
         for i, proxy in enumerate(proxies_to_test, 1):
@@ -145,24 +151,41 @@ class ProxyTester:
         print(f"✅ Working proxies: {len(working_proxies)}/{len(proxies_to_test)}")
         print(f"❌ Failed proxies: {len(failed_proxies)}/{len(proxies_to_test)}")
         
-        # ذخیره پروکسی‌های کارا
+        # ذخیره پروکسی‌های کارا در فایل جدید
         if working_proxies:
-            output_file = "working_proxies.txt"
-            with open(output_file, 'w') as f:
+            with open(self.output_file, 'w') as f:
+                # نوشتن هدر
+                f.write(f"# Valid proxies tested on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write(f"# Total working: {len(working_proxies)}/{len(proxies_to_test)}\n")
+                f.write("# Format: IP:PORT\n\n")
+                
                 for proxy in working_proxies:
                     # ذخیره بدون پروتکل
                     clean_proxy = proxy.replace('socks5://', '')
                     f.write(clean_proxy + '\n')
             
-            print(f"\n💾 Working proxies saved to: {output_file}")
+            print(f"\n💾 Valid proxies saved to: {self.output_file}")
             
             # نمایش نمونه از پروکسی‌های کارا
-            print("\n📝 Working proxies list:")
+            print("\n📝 Valid proxies list:")
             for proxy in working_proxies[:20]:
                 print(f"  {proxy.replace('socks5://', '')}")
             
             if len(working_proxies) > 20:
                 print(f"  ... and {len(working_proxies) - 20} more")
+            
+            # همچنین ذخیره با فرمت JSON برای استفاده برنامه‌ای
+            json_file = self.output_file.replace('.txt', '.json')
+            import json
+            with open(json_file, 'w') as f:
+                json.dump({
+                    "timestamp": datetime.now().isoformat(),
+                    "total_tested": len(proxies_to_test),
+                    "working_count": len(working_proxies),
+                    "working_proxies": [p.replace('socks5://', '') for p in working_proxies]
+                }, f, indent=2)
+            print(f"💾 JSON format saved to: {json_file}")
+            
         else:
             print("\n❌ No working proxies found!")
             print("\n💡 Troubleshooting tips:")
@@ -189,23 +212,30 @@ async def main():
     import argparse
     
     parser = argparse.ArgumentParser(description='Test SOCKS5 proxies with cookie file')
-    parser.add_argument('-p', '--proxy-file', default='proxy_socks_ip', help='Proxy list file')
-    parser.add_argument('-c', '--cookie-file', default=None, help='Cookie file path (cookies.txt)')
-    parser.add_argument('-m', '--max', type=int, default=None, help='Maximum proxies to test')
-    parser.add_argument('-s', '--single', type=str, default=None, help='Test a single proxy (IP:PORT)')
-    parser.add_argument('-d', '--delay', type=float, default=0.5, help='Delay between tests (seconds)')
+    parser.add_argument('-i', '--input', default='working_proxies.txt', 
+                        help='Input proxy file (default: working_proxies.txt)')
+    parser.add_argument('-o', '--output', default=None, 
+                        help='Output file for valid proxies (default: valid_proxies_TIMESTAMP.txt)')
+    parser.add_argument('-c', '--cookie', default=None, 
+                        help='Cookie file path (cookies.txt)')
+    parser.add_argument('-m', '--max', type=int, default=None, 
+                        help='Maximum proxies to test')
+    parser.add_argument('-s', '--single', type=str, default=None, 
+                        help='Test a single proxy (IP:PORT)')
+    parser.add_argument('-d', '--delay', type=float, default=0.5, 
+                        help='Delay between tests (seconds)')
     
     args = parser.parse_args()
     
     # اگر کاربر آرگومان تک پروکسی داده
     if args.single:
-        tester = ProxyTester(args.proxy_file, args.cookie_file)
+        tester = ProxyTester(args.input, args.cookie, args.output)
         proxy_to_test = args.single
         if not proxy_to_test.startswith('socks5://'):
             proxy_to_test = f"socks5://{proxy_to_test}"
         await tester.test_single_proxy(proxy_to_test)
     else:
-        tester = ProxyTester(args.proxy_file, args.cookie_file)
+        tester = ProxyTester(args.input, args.cookie, args.output)
         await tester.test_all_proxies(max_proxies=args.max, delay=args.delay)
 
 
